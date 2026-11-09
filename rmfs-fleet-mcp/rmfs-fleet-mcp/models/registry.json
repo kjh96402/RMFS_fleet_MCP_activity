@@ -1,0 +1,111 @@
+{
+  "source": "Kim, Kang & Jung (2026) C&IE 214:111910 — Section 4.2 settings",
+  "dataset": "dataset_sample.csv (합성 샘플 — 파이프라인 연습용, 수치 해석 금지)",
+  "default": "cmlp",
+  "hyperparameters": {
+    "hidden": 256,
+    "dropout": 0.3,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "batch_size": 64,
+    "alpha": 1.5,
+    "rf_n_estimators": 200,
+    "rf_min_samples_leaf": 3,
+    "xgb_n_estimators": 200,
+    "xgb_max_depth": 5,
+    "svr_C": 1.0
+  },
+  "quick": true,
+  "n_train": 2700,
+  "n_test": 300,
+  "trained_at": "2026-11-08 20:13",
+  "features": [
+    "order_volume",
+    "num_picking_stations",
+    "warehouse_dimension",
+    "current_num_robots",
+    "current_makespan",
+    "robot_density",
+    "avg_throughput_per_station",
+    "avg_fulfillment_per_pod",
+    "aisle_configuration",
+    "picking_station_placement",
+    "order_assignment",
+    "sku_pod_location",
+    "robot_assignment_flexibility"
+  ],
+  "models": {
+    "mlr": {
+      "type": "sklearn",
+      "file": "mlr.joblib",
+      "metrics": {
+        "R2": 0.969,
+        "MAE": 2.263,
+        "a20_index": 0.99
+      },
+      "train_seconds": 0.1
+    },
+    "svr": {
+      "type": "sklearn",
+      "file": "svr.joblib",
+      "metrics": {
+        "R2": 0.9599,
+        "MAE": 2.383,
+        "a20_index": 0.973
+      },
+      "train_seconds": 0.2
+    },
+    "rf": {
+      "type": "sklearn",
+      "file": "rf.joblib",
+      "metrics": {
+        "R2": 0.9737,
+        "MAE": 1.847,
+        "a20_index": 0.997
+      },
+      "train_seconds": 0.3
+    },
+    "xgb": {
+      "type": "sklearn",
+      "file": "xgb.joblib",
+      "metrics": {
+        "R2": 0.9759,
+        "MAE": 1.763,
+        "a20_index": 0.997
+      },
+      "train_seconds": 0.2
+    },
+    "mlp": {
+      "type": "torch",
+      "preprocess": "preprocess.joblib",
+      "state": "mlp_state.pt",
+      "n_features": 21,
+      "hidden": 256,
+      "dropout": 0.3,
+      "alpha": 1.0,
+      "metrics": {
+        "R2": 0.9602,
+        "MAE": 2.623,
+        "a20_index": 0.983,
+        "epochs": 30
+      },
+      "train_seconds": 3.0
+    },
+    "cmlp": {
+      "type": "torch",
+      "preprocess": "preprocess.joblib",
+      "state": "cmlp_state.pt",
+      "n_features": 21,
+      "hidden": 256,
+      "dropout": 0.3,
+      "alpha": 1.5,
+      "metrics": {
+        "R2": 0.9605,
+        "MAE": 2.567,
+        "a20_index": 0.977,
+        "epochs": 30
+      },
+      "train_seconds": 0.7
+    }
+  }
+}

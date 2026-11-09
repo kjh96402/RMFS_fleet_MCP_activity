@@ -1,0 +1,234 @@
+"""
+train.py — 데이터셋 CSV → 비교 모델군 학습 · 평가 · 저장 (논문 4.2절 설정 그대로)
+==================================================================================
+  MLR   LinearRegression
+  SVR   RBF, C=1.0, gamma='scale'
+  RF    n_estimators=200, max_depth=None, min_samples_leaf=3
+  XGB   n_estimators=200, max_depth=5
+  MLP   Linear(21,256)-BatchNorm-ReLU-Dropout(0.3)-Linear(256,1), AdamW(lr 1e-3, wd 1e-4), batch 64, early stopping
+  C-MLP 위 구조 + 비대칭 손실 (과소추정 페널티 α=1.50, Eq. 1)
+전처리: 수치형 8개 z-score + 범주형 5개 one-hot (21열) — sklearn ColumnTransformer (joblib 저장)
+평가:   테스트셋 10 % (random_state=42) · R² · MAE(정수 반올림 후) · a20-index
+
+server.py 의 train_models 도구와 tools/train_models.py CLI 가 모두 이 모듈을 사용한다.
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+
+import joblib
+import numpy as np
+import pandas as pd
+
+from fleet.features import ALL_FEATURES, CATEGORICAL, CATEGORICAL_FEATURES, NUMERIC_FEATURES, TARGET, engineer
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ALL_MODELS = ["mlr", "svr", "rf", "xgb", "mlp", "cmlp"]
+
+# 논문 Table 4 · Section 4.2 기본 하이퍼파라미터 (train_models 도구의 기본값)
+PAPER_HP = {"hidden": 256, "dropout": 0.3, "lr": 1e-3, "weight_decay": 1e-4, "batch_size": 64, "alpha": 1.5,
+            "rf_n_estimators": 200, "rf_min_samples_leaf": 3, "xgb_n_estimators": 200, "xgb_max_depth": 5, "svr_C": 1.0}
+
+# ------------------------------------------------------------------ 본인 데이터셋 열 이름 → 표준 이름
+# 왼쪽: CSV 의 실제 열 이름, 오른쪽: 표준 이름. 이미 같은 이름이면 비워 두어도 됨.
+COLUMN_MAP = {
+    # "ORDER_NUM": "order_volume", "NUM_PS": "num_picking_stations", "NUM_PODS": "num_pods",
+    # "MAX_ROBOTS": "max_robots", "MAKESPAN_AT_MAX_ROBOTS": "makespan_at_max_robots",
+    # "SKU_PER_ORDER": "skus_per_order", "SKU_PER_POD": "skus_per_pod",
+    # "AISLE_CONFIG": "aisle_configuration", "PS_PLACEMENT": "picking_station_placement",
+    # "ORDER_ASSIGN": "order_assignment", "SKU_POD_LOC": "sku_pod_location",
+    # "ROBOT_FLEX": "robot_assignment_flexibility", "OPT_ROBOTS": "optimal_robots",
+}
+# 범주값 표기가 다르면 여기서 표준값으로 치환  예) {"picking_station_placement": {"Long side & Both": "long_both"}}
+VALUE_MAP: dict[str, dict] = {}
+
+
+def default_dataset_path() -> tuple[str, str]:
+    """data/dataset.csv(발표자 실제 데이터)가 있으면 그것을, 없으면 data/dataset_sample.csv(합성 샘플)를 사용."""
+    real = os.path.join(ROOT, "data", "dataset.csv")
+    if os.path.exists(real):
+        return real, "dataset.csv (실제 시뮬레이션 데이터)"
+    return os.path.join(ROOT, "data", "dataset_sample.csv"), "dataset_sample.csv (합성 샘플 — 파이프라인 연습용, 수치 해석 금지)"
+
+
+def load_dataset(path: str):
+    df = pd.read_csv(path)
+    df = df.rename(columns={k: v for k, v in COLUMN_MAP.items() if k in df.columns})
+    for col, m in VALUE_MAP.items():
+        if col in df.columns:
+            df[col] = df[col].map(lambda v: m.get(v, v))
+    raw_needed = ["order_volume", "num_picking_stations", "num_pods", "max_robots", "makespan_at_max_robots",
+                  "skus_per_order", "skus_per_pod", *CATEGORICAL_FEATURES]
+    if all(c in df.columns for c in NUMERIC_FEATURES):
+        X = df[ALL_FEATURES].copy()
+    elif all(c in df.columns for c in raw_needed):
+        X = pd.DataFrame([engineer(r) for r in df[raw_needed].to_dict("records")])[ALL_FEATURES]
+    else:
+        missing = [c for c in raw_needed if c not in df.columns]
+        raise ValueError(f"데이터셋 열 부족: {missing} → fleet/train.py 의 COLUMN_MAP 에서 열 이름을 매핑할 것 (현재 열: {list(df.columns)})")
+    if TARGET not in df.columns:
+        raise ValueError(f"타깃 열 '{TARGET}' 없음 → COLUMN_MAP 에 매핑할 것")
+    for col, cats in CATEGORICAL.items():
+        bad = set(X[col].unique()) - set(cats)
+        if bad:
+            raise ValueError(f"{col} 에 허용되지 않는 값 {bad} → VALUE_MAP 으로 치환할 것 (허용: {cats})")
+    return X, df[TARGET].astype(float).to_numpy()
+
+
+def dataset_info(path: str | None = None) -> dict:
+    path, source = (path, os.path.basename(path)) if path else default_dataset_path()
+    X, y = load_dataset(path)
+    return {"source": source, "path": path, "n_rows": int(len(X)), "features": ALL_FEATURES, "target": TARGET,
+            "target_stats": {"min": int(y.min()), "max": int(y.max()), "mean": round(float(y.mean()), 1)},
+            "numeric_ranges": {c: [round(float(X[c].min()), 2), round(float(X[c].max()), 2)] for c in NUMERIC_FEATURES},
+            "categorical_values": {c: sorted(map(str, X[c].unique())) for c in CATEGORICAL_FEATURES}}
+
+
+def make_preprocessor():
+    from sklearn.compose import ColumnTransformer
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+    return ColumnTransformer([
+        ("num", StandardScaler(), NUMERIC_FEATURES),
+        ("cat", OneHotEncoder(categories=[CATEGORICAL[c] for c in CATEGORICAL_FEATURES], handle_unknown="error"), CATEGORICAL_FEATURES),
+    ], sparse_threshold=0)
+
+
+def metrics(y, yhat) -> dict:
+    from sklearn.metrics import mean_absolute_error, r2_score
+
+    yr = np.rint(yhat)
+    return {"R2": round(float(r2_score(y, yr)), 4), "MAE": round(float(mean_absolute_error(y, yr)), 3),
+            "a20_index": round(float(np.mean(np.abs(yr - y) <= 0.2 * y)), 3)}
+
+
+def train_sklearn(key, Xtr, ytr, hp, quick):
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.linear_model import LinearRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.svm import SVR
+
+    if key == "mlr":
+        reg = LinearRegression()
+    elif key == "svr":
+        reg = SVR(kernel="rbf", C=hp["svr_C"], gamma="scale")
+    elif key == "rf":
+        reg = RandomForestRegressor(n_estimators=50 if quick else hp["rf_n_estimators"], max_depth=None,
+                                    min_samples_leaf=hp["rf_min_samples_leaf"], random_state=42, n_jobs=-1)
+    elif key == "xgb":
+        from xgboost import XGBRegressor
+
+        reg = XGBRegressor(n_estimators=50 if quick else hp["xgb_n_estimators"], max_depth=hp["xgb_max_depth"], random_state=42, n_jobs=-1)
+    else:
+        raise ValueError(key)
+    pipe = Pipeline([("pre", make_preprocessor()), ("reg", reg)])
+    pipe.fit(Xtr, ytr)
+    return pipe
+
+
+def train_torch(Xtr_np, ytr, hp, alpha, quick, seed=42):
+    import torch
+
+    from fleet.registry import build_mlp
+
+    torch.manual_seed(seed)
+    n = len(Xtr_np)
+    idx = np.random.RandomState(seed).permutation(n)
+    n_val = max(2, int(n * 0.1))
+    va, tr = idx[:n_val], idx[n_val:]
+    X = torch.tensor(Xtr_np, dtype=torch.float32); y = torch.tensor(ytr, dtype=torch.float32).unsqueeze(1)
+    net = build_mlp(X.shape[1], hp["hidden"], hp["dropout"])
+    opt = torch.optim.AdamW(net.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
+    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, factor=0.5, patience=10)
+
+    def loss_fn(pred, true):                                    # Eq. (1): 과소추정(pred < true)에 α 배 페널티
+        se = (true - pred) ** 2
+        return (torch.where(pred < true, torch.full_like(se, alpha), torch.ones_like(se)) * se).mean()
+
+    best, best_state, wait = float("inf"), None, 0
+    # quick: 연습용(최대 5,000행 · 30 epoch · batch 128 · patience 5) — Claude Desktop 도구 호출 시간 안에 끝나도록
+    if quick and len(tr) > 5000:
+        tr = tr[:5000]
+    max_epochs, patience, bs = (30 if quick else 300), (5 if quick else 30), (128 if quick else hp["batch_size"])
+    for ep in range(max_epochs):
+        net.train()
+        perm = tr[np.random.RandomState(seed + ep).permutation(len(tr))]
+        for i in range(0, len(perm), bs):
+            b = perm[i:i + bs]
+            if len(b) < 2:
+                continue
+            opt.zero_grad(); loss_fn(net(X[b]), y[b]).backward(); opt.step()
+        net.eval()
+        with torch.no_grad():
+            vl = loss_fn(net(X[va]), y[va]).item()
+        sched.step(vl)
+        if vl < best - 1e-4:
+            best, best_state, wait = vl, {k: v.clone() for k, v in net.state_dict().items()}, 0
+        else:
+            wait += 1
+            if wait >= patience:
+                break
+    net.load_state_dict(best_state); net.eval()
+    return net, ep + 1
+
+
+def train_all(dataset_path: str | None = None, models: list[str] | None = None, hp: dict | None = None,
+              quick: bool = False, out_dir: str | None = None, log=print) -> dict:
+    """모델군 학습 → models/registry.json 저장 → 레지스트리 dict 반환."""
+    from sklearn.model_selection import train_test_split
+
+    hp = {**PAPER_HP, **(hp or {})}
+    models = [m for m in (models or ALL_MODELS)]
+    bad = [m for m in models if m not in ALL_MODELS]
+    if bad:
+        raise ValueError(f"알 수 없는 모델 키 {bad} (선택: {ALL_MODELS})")
+    path, source = (dataset_path, os.path.basename(dataset_path)) if dataset_path else default_dataset_path()
+    out_dir = out_dir or os.path.join(ROOT, "models")
+    X, y = load_dataset(path)
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.10, random_state=42)
+    os.makedirs(out_dir, exist_ok=True)
+    reg = {"source": "Kim, Kang & Jung (2026) C&IE 214:111910 — Section 4.2 settings", "dataset": source,
+           "default": "cmlp" if "cmlp" in models else models[0], "hyperparameters": hp, "quick": quick,
+           "n_train": int(len(Xtr)), "n_test": int(len(Xte)), "trained_at": time.strftime("%Y-%m-%d %H:%M"),
+           "features": ALL_FEATURES, "models": {}}
+    log(f"데이터 {source}: {len(X):,}건 → 학습 {len(Xtr):,} / 테스트 {len(Xte):,}")
+    pre = None
+    for key in models:
+        t0 = time.time()
+        if key in ("mlr", "svr", "rf", "xgb"):
+            pipe = train_sklearn(key, Xtr, ytr, hp, quick)
+            m = metrics(yte, pipe.predict(Xte))
+            joblib.dump(pipe, os.path.join(out_dir, f"{key}.joblib"))
+            reg["models"][key] = {"type": "sklearn", "file": f"{key}.joblib", "metrics": m}
+        else:
+            if pre is None:
+                pre = make_preprocessor().fit(Xtr)
+                joblib.dump(pre, os.path.join(out_dir, "preprocess.joblib"))
+            alpha = hp["alpha"] if key == "cmlp" else 1.0
+            net, epochs = train_torch(pre.transform(Xtr), ytr, hp, alpha, quick)
+            import torch
+
+            with torch.no_grad():
+                yhat = net(torch.tensor(pre.transform(Xte), dtype=torch.float32)).squeeze(1).numpy()
+            m = metrics(yte, yhat); m["epochs"] = epochs
+            torch.save(net.state_dict(), os.path.join(out_dir, f"{key}_state.pt"))
+            reg["models"][key] = {"type": "torch", "preprocess": "preprocess.joblib", "state": f"{key}_state.pt",
+                                  "n_features": int(pre.transform(Xtr[:1]).shape[1]), "hidden": hp["hidden"],
+                                  "dropout": hp["dropout"], "alpha": alpha, "metrics": m}
+        reg["models"][key]["train_seconds"] = round(time.time() - t0, 1)
+        log(f"  {key:5s}  R2={m['R2']:.3f}  MAE={m['MAE']:.2f}  a20={m['a20_index']:.2f}  ({reg['models'][key]['train_seconds']}s)")
+    # 이전 레지스트리에 있던 다른 모델은 유지(부분 재학습 지원)
+    prev_path = os.path.join(out_dir, "registry.json")
+    if os.path.exists(prev_path):
+        try:
+            prev = json.load(open(prev_path, encoding="utf-8"))
+            for k, v in prev.get("models", {}).items():
+                if k not in reg["models"] and os.path.exists(os.path.join(out_dir, v.get("file") or v.get("state", ""))):
+                    reg["models"][k] = v
+        except Exception:
+            pass
+    json.dump(reg, open(prev_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    log(f"저장 완료 → {prev_path} (기본 모델: {reg['default']})")
+    return reg

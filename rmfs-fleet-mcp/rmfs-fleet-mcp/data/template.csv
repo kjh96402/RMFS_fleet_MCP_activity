@@ -1,0 +1,4 @@
+center_id,order_volume,num_picking_stations,num_pods,max_robots,makespan_at_max_robots,skus_per_order,skus_per_pod,aisle_configuration,picking_station_placement,order_assignment,sku_pod_location,robot_assignment_flexibility
+센터A,1000,8,2176,80,4400,2,20,general,long_both,shared_sku_clustering,same_class_zoning,pooled
+센터B,800,6,1900,60,3900,2,20,square,short_one,fcfs,class_random_scatter,dedicated
+센터C,1250,12,2600,120,4100,3,25,elongated,long_one,shared_sku_clustering,same_class_zoning,pooled
