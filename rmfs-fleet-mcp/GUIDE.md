@@ -44,16 +44,30 @@ python client_demo.py    # Python 이 MCP 클라이언트가 되어 server.py �
 기대 출력(마지막 줄): `OK — Python 환경 정상` / `OK — MCP 연결 정상`
 
 ### Step 3. Claude Desktop 연동
+1. Claude Desktop 을 **완전히 종료** (작업 표시줄 트레이 아이콘 ▸ **Quit**) — 실행 중이면 앱이 설정 파일을 다시 덮어쓴다
+2. VS Code 터미널(가상환경 활성화 상태)에서:
 ```bash
-python tools/make_config.py --write
+python tools/make_config.py          # 감지된 설정 파일 위치만 확인 (저장 안 함)
+python tools/make_config.py --write  # 감지된 위치에 rmfs-fleet 항목 병합 저장 (기존 설정 유지 · .bak 백업)
 ```
-→ 설정 파일(`%APPDATA%\Claude\claude_desktop_config.json`)에 아래 내용이 자동 저장된다 (직접 붙여넣어도 됨).
+3. Claude Desktop 다시 실행 → **Settings ▸ Developer** 에서 rmfs-fleet 이 `running` 인지 확인 → 입력창 도구 아이콘에 **rmfs-fleet** 표시
+
+저장되는 내용 (경로는 본인 PC 기준으로 자동 입력):
 ```json
 { "mcpServers": { "rmfs-fleet": { "command": "C:/…/rmfs-fleet-mcp/.venv/Scripts/python.exe",
                                    "args": ["C:/…/rmfs-fleet-mcp/server.py", "--stdio"] } } }
 ```
-Claude Desktop 을 **완전히 종료**(작업 표시줄 트레이 아이콘 ▸ Quit) 후 다시 실행 → 입력창의 도구 아이콘에 **rmfs-fleet** 표시.
-수동 편집 경로: Claude 메뉴 ▸ **Settings ▸ Developer ▸ Edit Config**
+
+**설정 파일 위치 — 설치 방식마다 다르다 (Windows)**
+
+| 설치 방식 | Claude Desktop 이 읽는 파일 |
+|---|---|
+| Microsoft Store 빌드 (최신) | `%LOCALAPPDATA%\Claude-Data\claude_<패키지ID>\claude_desktop_config.json` |
+| Microsoft Store 빌드 (이전) | `%LOCALAPPDATA%\Packages\Claude_<패키지ID>\LocalCache\Roaming\Claude\claude_desktop_config.json` |
+| 일반 설치판 (.exe) | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+`make_config.py` 는 PC 에 있는 위치를 모두 찾아 각각 저장한다. Store 빌드는 `%APPDATA%\Claude` 를 읽지 않으므로 그 파일만 고치면 rmfs-fleet 가 나타나지 않는다.
+직접 지정: `python tools/make_config.py --write --path "<설정 파일 전체 경로>"`
 
 ### Step 4. 딥러닝 추정 실습 — 프롬프트를 그대로 입력
 **P1 · 데이터·도구 확인**
@@ -85,7 +99,9 @@ Claude Desktop 을 **완전히 종료**(작업 표시줄 트레이 아이콘 ▸
 |---|---|
 | `pip install` 에서 torch 오류 | Python 3.10~3.12 인지 확인 (`python --version`), 64-bit, 재시도 |
 | `python run_local.py` 가 `ModuleNotFoundError` | 가상환경 활성화 안 됨 → `.venv\Scripts\activate` 후 재실행 |
-| Claude 도구 아이콘에 rmfs-fleet 없음 | Claude Desktop 을 트레이에서 **Quit** 후 재실행 · `make_config.py` 가 출력한 경로에 파일이 있는지 확인 |
+| Claude 도구 아이콘에 rmfs-fleet 없음 | ① 트레이에서 **Quit** → `python tools/make_config.py` 로 감지 위치 확인 → `--write` 재실행 → Claude 재실행 ② Store 빌드인데 `%APPDATA%\Claude` 파일만 고친 경우: 앱이 읽는 파일은 `%LOCALAPPDATA%\Claude-Data\claude_…` 쪽 (Step 3 표) |
+| `make_config.py` 가 "Claude Desktop 이 실행 중" 으로 중단 | 트레이 아이콘 ▸ Quit 으로 완전히 종료 후 다시 실행 (창만 닫으면 백그라운드에 남음) |
+| "JSON 형식 오류 — 건너뜀" | 해당 파일을 메모장으로 열어 쉼표·괄호를 고치거나, `.bak` 백업으로 되돌린 뒤 재실행 |
 | 도구 호출 시 `mode: demo` | 모델 미학습 → P2(train_models) 실행 또는 `python run_local.py` |
 | `model='RF'` 오류 | 모델 키는 소문자 `rf` |
 | 범주값 오류 (`'pool'`) | 오류 메시지의 허용값(`dedicated | pooled` …)으로 Claude 에게 재호출 요청 |

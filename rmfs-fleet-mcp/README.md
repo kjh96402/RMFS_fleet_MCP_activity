@@ -14,7 +14,7 @@ Claude Desktop ──stdio(MCP)──▶ server.py ──▶ fleet/train.py(학�
 |---|---|---|
 | 1. GitHub 연동 | VS Code ▸ `Git: Clone` ▸ 저장소 URL ▸ 폴더 열기 ▸ 터미널에서 `pip install -r requirements.txt` | 설치 완료 메시지 |
 | 2. Python 작동 | `python run_local.py` (학습 + 추정 콘솔 출력) → `python client_demo.py` (Python MCP 클라이언트로 서버 연결) | `OK — MCP 연결 정상` |
-| 3. Claude 연동 | `python tools/make_config.py --write` → Claude Desktop 완전 종료 후 재실행 | 도구 아이콘에 `rmfs-fleet` |
+| 3. Claude 연동 | Claude Desktop 완전 종료(트레이 ▸ Quit) → `python tools/make_config.py --write` (설치 방식별 설정 파일 위치 자동 탐색) → 재실행 | 도구 아이콘에 `rmfs-fleet` |
 | 4. 딥러닝 추정 | GUIDE.md 의 프롬프트 P1~P5 를 순서대로 입력 | 학습 성능표 · 추정 결과 · 모델 비교 · 시사점 |
 
 ## 도구 (Claude 가 호출)
@@ -33,7 +33,7 @@ Claude Desktop ──stdio(MCP)──▶ server.py ──▶ fleet/train.py(학�
 
 ```
 server.py          MCP 서버 (도구 정의)             run_local.py      Python 작동 확인 (학습+추정)
-client_demo.py     Python MCP 클라이언트 연결 확인   tools/make_config.py  Claude Desktop 설정 생성
+client_demo.py     Python MCP 클라이언트 연결 확인   tools/make_config.py  Claude Desktop 설정 위치 탐색·저장
 fleet/train.py     학습 (논문 설정·COLUMN_MAP)      fleet/features.py  입력 스키마·검증·파생 Feature
 fleet/registry.py  모델 로딩·추론                   fleet/layout.py    레이아웃 SVG
 data/dataset.csv   (발표자가 넣는 실제 데이터)       data/dataset_sample.csv  합성 샘플 (연습용)
