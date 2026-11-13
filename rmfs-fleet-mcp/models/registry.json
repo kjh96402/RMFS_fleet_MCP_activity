@@ -1,6 +1,7 @@
 {
   "source": "Kim, Kang & Jung (2026) C&IE 214:111910 — Section 4.2 settings",
-  "dataset": "dataset_sample.csv (합성 샘플 — 파이프라인 연습용, 수치 해석 금지)",
+  "dataset": "train_data.csv (논문 시뮬레이션 데이터셋)",
+  "n_rows": 11232,
   "default": "cmlp",
   "hyperparameters": {
     "hidden": 256,
@@ -8,6 +9,7 @@
     "lr": 0.001,
     "weight_decay": 0.0001,
     "batch_size": 64,
+    "epochs": 120,
     "alpha": 1.5,
     "rf_n_estimators": 200,
     "rf_min_samples_leaf": 3,
@@ -15,33 +17,33 @@
     "xgb_max_depth": 5,
     "svr_C": 1.0
   },
-  "quick": true,
-  "n_train": 2700,
-  "n_test": 300,
-  "trained_at": "2026-11-08 20:13",
+  "quick": false,
+  "n_train": 10108,
+  "n_test": 1124,
+  "trained_at": "2026-11-13 21:03",
   "features": [
-    "order_volume",
-    "num_picking_stations",
-    "warehouse_dimension",
-    "current_num_robots",
-    "current_makespan",
-    "robot_density",
-    "avg_throughput_per_station",
-    "avg_fulfillment_per_pod",
-    "aisle_configuration",
-    "picking_station_placement",
-    "order_assignment",
-    "sku_pod_location",
-    "robot_assignment_flexibility"
+    "ORDER_NUM",
+    "NUM_PS",
+    "WAREHOUSE_DIM",
+    "MAX_ROBOTS",
+    "MAKESPAN_AT_MAX_ROBOTS",
+    "ROBOT_DENSITY",
+    "REQUIRED_THROUGHPUT_PER_PS_HOUR",
+    "REQUIRED_FULFILL_PER_POD_HOUR",
+    "AISLE_CONFIGURATION",
+    "PLACEMENT_CODE",
+    "BATCHING_MODE",
+    "OPTION",
+    "DEDICATED_MODE"
   ],
   "models": {
     "mlr": {
       "type": "sklearn",
       "file": "mlr.joblib",
       "metrics": {
-        "R2": 0.969,
-        "MAE": 2.263,
-        "a20_index": 0.99
+        "R2": 0.9521,
+        "MAE": 4.108,
+        "a20_index": 0.973
       },
       "train_seconds": 0.1
     },
@@ -49,29 +51,29 @@
       "type": "sklearn",
       "file": "svr.joblib",
       "metrics": {
-        "R2": 0.9599,
-        "MAE": 2.383,
-        "a20_index": 0.973
+        "R2": 0.9491,
+        "MAE": 4.032,
+        "a20_index": 0.963
       },
-      "train_seconds": 0.2
+      "train_seconds": 4.1
     },
     "rf": {
       "type": "sklearn",
       "file": "rf.joblib",
       "metrics": {
-        "R2": 0.9737,
-        "MAE": 1.847,
-        "a20_index": 0.997
+        "R2": 0.9481,
+        "MAE": 4.205,
+        "a20_index": 0.974
       },
-      "train_seconds": 0.3
+      "train_seconds": 3.9
     },
     "xgb": {
       "type": "sklearn",
       "file": "xgb.joblib",
       "metrics": {
-        "R2": 0.9759,
-        "MAE": 1.763,
-        "a20_index": 0.997
+        "R2": 0.9454,
+        "MAE": 4.233,
+        "a20_index": 0.973
       },
       "train_seconds": 0.2
     },
@@ -84,12 +86,12 @@
       "dropout": 0.3,
       "alpha": 1.0,
       "metrics": {
-        "R2": 0.9602,
-        "MAE": 2.623,
-        "a20_index": 0.983,
-        "epochs": 30
+        "R2": 0.9529,
+        "MAE": 3.975,
+        "a20_index": 0.975,
+        "epochs": 120
       },
-      "train_seconds": 3.0
+      "train_seconds": 24.3
     },
     "cmlp": {
       "type": "torch",
@@ -100,12 +102,12 @@
       "dropout": 0.3,
       "alpha": 1.5,
       "metrics": {
-        "R2": 0.9605,
-        "MAE": 2.567,
-        "a20_index": 0.977,
-        "epochs": 30
+        "R2": 0.9508,
+        "MAE": 3.902,
+        "a20_index": 0.965,
+        "epochs": 120
       },
-      "train_seconds": 0.7
+      "train_seconds": 22.7
     }
   }
 }

@@ -1,27 +1,30 @@
 """
 layout.py — RMFS 레이아웃 개략도 (논문 Table 1 통로 구성 기준) 스펙 계산 + SVG 생성
 ===================================================================================
-통로 구성(aisle × cross-aisle)      : square 15×15 (종횡비 1.0) · general 12×18 (1.5) · elongated 9×27 (3.0)
+통로 구성(NUM_AISLES × NUM_CROSS_AISLES) : Square 15×15 (종횡비 1.0) · General 12×18 (1.5) · Elongated 9×27 (3.0)
 보관 블록                          : (aisle+1) × (cross-aisle+1) 개, 블록당 Pod 10개 (2 m × 5 m, Pod 1 m × 1 m)
 Pod 수                             : 블록 수 × 10 × 점유율(0.8~1.0)  → 입력 num_pods 로 점유율 역산
-피킹 스테이션 배치                 : long/short side × one/both  (긴 변 = 블록 행이 많은 세로변)
+피킹 스테이션 배치(PLACEMENT_CODE) : BL · BS · OL · OS = Both/One side × Long/Short side  (긴 변 = 블록 행이 많은 세로변)
 """
 from __future__ import annotations
 
-AISLE_CONFIG = {"square": (15, 15, 1.0), "general": (12, 18, 1.5), "elongated": (9, 27, 3.0)}
+from fleet.features import aisle_configuration as _aisle_configuration
+
 PODS_PER_BLOCK = 10
 
 
-def layout_spec(aisle_configuration: str, num_picking_stations: int, picking_station_placement: str,
+def layout_spec(num_aisles: int, num_cross_aisles: int, num_picking_stations: int, placement_code: str,
                 num_pods: int | None = None, max_robots: int | None = None) -> dict:
-    n_a, n_c, ratio = AISLE_CONFIG[aisle_configuration]
+    n_a, n_c = int(num_aisles), int(num_cross_aisles)
+    ratio = round(n_c / n_a, 2)
+    aisle_configuration = str(_aisle_configuration(n_a, n_c))
     cols, rows = n_a + 1, n_c + 1
     blocks = cols * rows
     capacity = blocks * PODS_PER_BLOCK
     pods = num_pods if num_pods else capacity
     occupancy = round(min(pods / capacity, 1.0), 3)
     long_is_vertical = rows >= cols
-    side, both = picking_station_placement.split("_")
+    both, side = ("both" if placement_code[0] == "B" else "one"), ("long" if placement_code[1] == "L" else "short")
     if (side == "long") == long_is_vertical:
         edges = ["left", "right"] if both == "both" else ["left"]
     else:
@@ -38,7 +41,7 @@ def layout_spec(aisle_configuration: str, num_picking_stations: int, picking_sta
         "aisle_configuration": aisle_configuration, "aisles": n_a, "cross_aisles": n_c, "aspect_ratio": ratio,
         "block_grid": {"cols": cols, "rows": rows, "blocks": blocks, "pods_per_block": PODS_PER_BLOCK},
         "pod_capacity": capacity, "num_pods": pods, "storage_occupancy": occupancy,
-        "picking_station_placement": picking_station_placement, "station_edges": edges, "stations": stations,
+        "placement_code": placement_code, "station_edges": edges, "stations": stations,
         "max_robots": max_robots, "length_m": rows * 5 + n_c, "width_m": cols * 2 + n_a,
     }
 
@@ -84,7 +87,7 @@ def layout_svg(spec: dict, title: str = "RMFS 레이아웃 개략도", width_px:
              f'<text x="{margin+166}" y="{ly}" font-size="10" fill="#333">피킹 스테이션</text>')
     info = (f'통로 {spec["aisles"]} × 교차통로 {spec["cross_aisles"]} ({spec["aisle_configuration"]}, 종횡비 {spec["aspect_ratio"]}) · '
             f'블록 {spec["block_grid"]["blocks"]} · Pod {spec["num_pods"]:,} / 용량 {spec["pod_capacity"]:,} (점유율 {spec["storage_occupancy"]:.0%}) · '
-            f'PS {len(spec["stations"])}개 ({spec["picking_station_placement"]})' + (f' · 보유 로봇 {spec["max_robots"]}대' if spec.get("max_robots") else ""))
+            f'PS {len(spec["stations"])}개 ({spec["placement_code"]})' + (f' · 보유 로봇 {spec["max_robots"]}대' if spec.get("max_robots") else ""))
     o.append(f'<text x="{margin}" y="{ly+18}" font-size="9.5" fill="#555">{info}</text>')
     o.append("</svg>")
     return "\n".join(o)

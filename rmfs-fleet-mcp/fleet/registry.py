@@ -1,7 +1,7 @@
 """
 registry.py — 학습된 모델 레지스트리 (models/registry.json)
 ============================================================
-tools/train_models.py 가 생성한 모델들을 읽어 공통 인터페이스 predict(model_key, X_df) 로 제공한다.
+fleet/train.py 가 data/train_data.csv 로 학습해 저장한 모델들을 읽어 공통 인터페이스 predict(model_key, X_df) 로 제공한다.
 
   sklearn 계열 (MLR · SVR · RF · XGB) : Pipeline(전처리 + 회귀기)  → *.joblib
   torch 계열  (MLP · C-MLP)          : preprocess.joblib + *_state.pt (논문 Table 4 구조 재생성)
@@ -38,9 +38,9 @@ class _DemoModel:
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         # 논문 Table 7 경향(80대·8 PS 기준 주문 800↓→약 66대, 1,000→약 70대, 1,200↑→약 73대)을 흉내 낸 비례식
-        u = X["order_volume"].to_numpy() / (X["num_picking_stations"].to_numpy() * 125.0)
+        u = X["ORDER_NUM"].to_numpy() / (X["NUM_PS"].to_numpy() * 125.0)
         ratio = np.clip(0.87 + 0.12 * (u - 1.0), 0.6, 1.0)
-        return X["current_num_robots"].to_numpy() * ratio
+        return X["MAX_ROBOTS"].to_numpy() * ratio
 
 
 class _SklearnModel:

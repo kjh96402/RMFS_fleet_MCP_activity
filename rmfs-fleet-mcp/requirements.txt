@@ -4,6 +4,6 @@ pandas
 scikit-learn>=1.6
 xgboost>=2.0
 joblib
-# MLP / C-MLP 추론·학습용 — CPU 전용 wheel (Render 무료 플랜 호환)
+# MLP / C-MLP 학습·추론용 — CPU 전용 wheel (용량 작음)
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.2
