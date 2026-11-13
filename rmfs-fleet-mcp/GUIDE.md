@@ -62,7 +62,7 @@ Claude Desktop 새 대화창(입력창 [+] 에서 rmfs-fleet 켜짐 확인)에 P
 > train_models 를 models=["cmlp"] 로 alpha 를 1.25, 1.5, 2.0, 3.0 네 번 실행해 MAE·R² 변화를 표로 정리하고, 과소추정 페널티 α 를 키우면 무엇이 좋아지고 무엇이 나빠지는지 2줄로 설명해 줘. 마지막에는 alpha=1.5 로 다시 학습해 기본 상태로 돌려 줘.
 
 **P4 · 운영 조건 입력 → 적정 로봇 대수 추정** (입력 = `data/Data_single_row.csv` 형식 1행)
-> 아래 CSV 1행(Data_single_row.csv 형식)을 운영 조건으로 C-MLP 로 적정 로봇 대수를 추정하고, 절감 대수·warnings·mode 를 함께 보여 줘. 이어서 같은 조건을 whatif_order_volume 에 넣어 주문 700~1,300건(100건 간격) 변화를 표와 꺾은선 차트로 보여 줘.
+> 아래 CSV 1행(Data_single_row.csv 형식)을 운영 조건으로 C-MLP 로 적정 로봇 대수를 추정하고, 절감 대수·warnings·mode 를 함께 보여 줘. 이어서 whatif_order_volume 로 주문 700~1,300건(100건 간격) 변화를 표와 꺾은선 차트로 보여 줘.
 > ORDER_NUM,SKU_COUNT_OPTIONS,NUM_AISLES,NUM_CROSS_AISLES,NUM_PS,PLACEMENT_CODE,BATCHING_MODE,OPTION,DEDICATED_MODE,MAX_ROBOTS,MAKESPAN_AT_MAX_ROBOTS,NUM_PODS
 > 700,2,15,16,4,BL,SHARED_CLUSTER,1,pooled,40,2919,2176
 
